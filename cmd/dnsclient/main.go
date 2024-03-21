@@ -11,6 +11,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/dnsclient"
 	"github.com/syslab-wm/dnsclient/internal/defaults"
+	"github.com/syslab-wm/dnsclient/internal/netx"
 	"github.com/syslab-wm/mu"
 )
 
@@ -100,37 +101,28 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "%s", usage)
 }
 
-func tryAddDefaultPort(server string, port string) (string, error) {
-	_, _, err := net.SplitHostPort(server)
-	if err == nil {
-		return server, nil
+func tryAddDefaultPort(server string, port string) string {
+	if netx.HasPort(server) {
+		return server
 	}
-
-	server1 := fmt.Sprintf("%s:%s", server, port)
-	_, _, err = net.SplitHostPort(server1)
-	if err == nil {
-		return server1, nil
-	}
-
-	return "", fmt.Errorf("invalid server name %q", server)
+	return net.JoinHostPort(server, port)
 }
 
 func parseOptions() *Options {
-	var err error
 	var ok bool
-	options := Options{}
+	opts := Options{}
 
 	flag.Usage = printUsage
 	// general options
-	flag.StringVar(&options.proto, "proto", "do53", "")
-	flag.StringVar(&options.server, "server", "", "")
-	flag.StringVar(&options.qtypeStr, "qtype", "A", "")
-	flag.DurationVar(&options.timeout, "timeout", defaults.Timeout, "")
-	flag.IntVar(&options.maxCNAMEs, "max-cnames", defaults.MaxCNAMEs, "")
-	flag.BoolVar(&options.dnssec, "dnssec", false, "")
+	flag.StringVar(&opts.proto, "proto", "do53", "")
+	flag.StringVar(&opts.server, "server", "", "")
+	flag.StringVar(&opts.qtypeStr, "qtype", "A", "")
+	flag.DurationVar(&opts.timeout, "timeout", defaults.Timeout, "")
+	flag.IntVar(&opts.maxCNAMEs, "max-cnames", defaults.MaxCNAMEs, "")
+	flag.BoolVar(&opts.dnssec, "dnssec", false, "")
 	// do53-specific options
-	flag.BoolVar(&options.tcp, "tcp", false, "")
-	flag.BoolVar(&options.retryWithTCP, "retry-with-tcp", false, "")
+	flag.BoolVar(&opts.tcp, "tcp", false, "")
+	flag.BoolVar(&opts.retryWithTCP, "retry-with-tcp", false, "")
 
 	flag.Parse()
 
@@ -138,108 +130,107 @@ func parseOptions() *Options {
 		mu.Fatalf("error: expected one positional argument but got %d", flag.NArg())
 	}
 
-	options.qname = flag.Arg(0)
+	opts.qname = flag.Arg(0)
 
-	options.proto = strings.ToLower(options.proto)
-	if options.proto != "do53" && options.proto != "dot" && options.proto != "doh" {
-		mu.Fatalf("error: unrecognized proto %q: must be either \"do53\", \"dot\", or \"doh\"", options.proto)
+	opts.proto = strings.ToLower(opts.proto)
+	if opts.proto != "do53" && opts.proto != "dot" && opts.proto != "doh" {
+		mu.Fatalf("error: unrecognized proto %q: must be either \"do53\", \"dot\", or \"doh\"", opts.proto)
 	}
 
-	options.qtypeStr = strings.ToUpper(options.qtypeStr)
-	options.qtype, ok = dns.StringToType[options.qtypeStr]
+	opts.qtypeStr = strings.ToUpper(opts.qtypeStr)
+	opts.qtype, ok = dns.StringToType[opts.qtypeStr]
 	if !ok {
-		mu.Fatalf("error: invalid qtype %q", options.qtypeStr)
+		mu.Fatalf("error: invalid qtype %q", opts.qtypeStr)
 	}
 
-	if options.proto == "do53" {
-		if options.tcp && options.retryWithTCP {
+	if opts.proto == "do53" {
+		if opts.tcp && opts.retryWithTCP {
 			mu.Fatalf("error: can't specify both -tcp and -retry-with-tcp")
 		}
 
-		if options.server == "" {
-			options.server = defaults.Do53Server
+		if opts.server == "" {
+			opts.server = defaults.Do53Server
 		} else {
-			options.server, err = tryAddDefaultPort(options.server, defaults.Do53Port)
-			if err != nil {
-				mu.Fatalf("error: %v", err)
-			}
+			opts.server = tryAddDefaultPort(opts.server, defaults.Do53Port)
 		}
 	}
 
-	if options.proto != "do53" {
-		if options.tcp {
+	if opts.proto != "do53" {
+		if opts.tcp {
 			mu.Fatalf("error: -tcp is only valid for -proto do53")
 		}
-		if options.retryWithTCP {
+		if opts.retryWithTCP {
 			mu.Fatalf("error: -retry-with-tcp is only valid for -proto do53")
 		}
 	}
 
-	if options.proto == "dot" {
-		if options.server == "" {
-			options.server = defaults.DoTServer
+	if opts.proto == "dot" {
+		if opts.server == "" {
+			opts.server = defaults.DoTServer
 		} else {
-			options.server, err = tryAddDefaultPort(options.server, defaults.DoTPort)
-			if err != nil {
-				mu.Fatalf("error: %v", err)
-			}
+			opts.server = tryAddDefaultPort(opts.server, defaults.DoTPort)
 		}
 	}
 
-	if options.proto == "doh" {
-		if options.server == "" {
-			options.server = defaults.DoHURL
+	if opts.proto == "doh" {
+		if opts.server == "" {
+			opts.server = defaults.DoHURL
 		}
-		// TODO: parse the options.server URL to make sure it is a valid HTTPS url
+		// TODO: parse the opts.server URL to make sure it is a valid HTTPS url
 	}
 
-	return &options
+	return &opts
 }
 
-func main() {
+func newClient(opts *Options) dnsclient.Client {
 	var c dnsclient.Client
 
-	options := parseOptions()
 	baseConfig := dnsclient.Config{
 		RecursionDesired: true,
-		Timeout:          options.timeout,
-		MaxCNAMEs:        options.maxCNAMEs,
-		DNSSEC:           options.dnssec,
+		Timeout:          opts.timeout,
+		MaxCNAMEs:        opts.maxCNAMEs,
+		DNSSEC:           opts.dnssec,
 	}
 
-	switch options.proto {
+	switch opts.proto {
 	case "do53":
 		config := &dnsclient.Do53Config{
 			Config:       baseConfig,
-			UseTCP:       options.tcp,
-			RetryWithTCP: options.retryWithTCP,
-			Server:       options.server,
+			UseTCP:       opts.tcp,
+			RetryWithTCP: opts.retryWithTCP,
+			Server:       opts.server,
 		}
 		c = dnsclient.NewDo53Client(config)
 	case "dot":
 		config := &dnsclient.DoTConfig{
 			Config: baseConfig,
-			Server: options.server,
+			Server: opts.server,
 		}
 		c = dnsclient.NewDoTClient(config)
 	case "doh":
 		config := &dnsclient.DoHConfig{
 			Config: baseConfig,
-			URL:    options.server,
+			URL:    opts.server,
 		}
 		c = dnsclient.NewDoHClient(config)
 	default:
-		mu.BUG("invalid proto %q", options.proto)
+		mu.BUG("invalid proto %q", opts.proto)
 	}
 
+	return c
+}
+
+func main() {
+	opts := parseOptions()
+
+	c := newClient(opts)
 	err := c.Dial()
 	if err != nil {
 		mu.Fatalf("failed to connect to DNS server: %v", err)
 	}
 	defer c.Close()
 
-	//resp, err := c.Query(options.qname, options.qtype)
-	resp, err := dnsclient.Query(c, options.qname, options.qtype)
+	resp, err := dnsclient.Query(c, opts.qname, opts.qtype)
 	if err != nil {
 		mu.Fatalf("query failed: %v", err)
 	}

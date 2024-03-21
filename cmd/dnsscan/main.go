@@ -14,6 +14,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/dnsclient"
 	"github.com/syslab-wm/dnsclient/internal/defaults"
+	"github.com/syslab-wm/dnsclient/internal/netx"
 	"github.com/syslab-wm/mu"
 )
 
@@ -106,23 +107,14 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "%s", usage)
 }
 
-func tryAddDefaultPort(server string, port string) (string, error) {
-	_, _, err := net.SplitHostPort(server)
-	if err == nil {
-		return server, nil
+func tryAddDefaultPort(server string, port string) string {
+	if netx.HasPort(server) {
+		return server
 	}
-
-	server1 := fmt.Sprintf("%s:%s", server, port)
-	_, _, err = net.SplitHostPort(server1)
-	if err == nil {
-		return server1, nil
-	}
-
-	return "", fmt.Errorf("invalid server name %q", server)
+	return net.JoinHostPort(server, port)
 }
 
 func parseOptions() *Options {
-	var err error
 	var ok bool
 	opts := Options{}
 
@@ -167,10 +159,7 @@ func parseOptions() *Options {
 		if opts.server == "" {
 			opts.server = defaults.Do53Server
 		} else {
-			opts.server, err = tryAddDefaultPort(opts.server, defaults.Do53Port)
-			if err != nil {
-				mu.Fatalf("error: %v", err)
-			}
+			opts.server = tryAddDefaultPort(opts.server, defaults.Do53Port)
 		}
 	}
 
@@ -187,10 +176,7 @@ func parseOptions() *Options {
 		if opts.server == "" {
 			opts.server = defaults.DoTServer
 		} else {
-			opts.server, err = tryAddDefaultPort(opts.server, defaults.DoTPort)
-			if err != nil {
-				mu.Fatalf("error: %v", err)
-			}
+			opts.server = tryAddDefaultPort(opts.server, defaults.DoTPort)
 		}
 	}
 

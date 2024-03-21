@@ -1,15 +1,11 @@
 package dnsclient
 
 import (
-	"errors"
 	"fmt"
-	"net/netip"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/dnsclient/internal/msgutil"
-	"github.com/syslab-wm/functools"
-	"github.com/syslab-wm/mu"
 )
 
 // This is configuration that applies to all typs of clients -- it deals purely
@@ -33,35 +29,41 @@ type DNSErr int
 
 const (
 	DNSErrRcodeNotSuccess DNSErr = iota
+
 	DNSErrMissingAnswer
 	DNSErrInvalidAnswer
 	DNSErrInvalidCNAMEChain
 	DNSErrMaxCNAMEs
+
+	DNSErrBadFormatAnswer
 )
 
 var DNSErrToString = map[DNSErr]string{
-	DNSErrRcodeNotSuccess:   "RCODE was not SUCCESS",
+	DNSErrRcodeNotSuccess: "RCODE was not SUCCESS",
+
 	DNSErrMissingAnswer:     "DNS response does not answer the query",
 	DNSErrInvalidAnswer:     "DNS response has an answer that matches neither the qname nor one of its aliases",
 	DNSErrInvalidCNAMEChain: "DNS response contains an invalid CNAME chain",
 	DNSErrMaxCNAMEs:         "query followed max number of CNAMEs",
+
+	DNSErrBadFormatAnswer: "DNS response has an answer where the data does not conform to the RR type",
 }
 
 type DNSError struct {
-	reason   DNSErr
-	response *dns.Msg
+	Reason   DNSErr
+	Response *dns.Msg // optional
 }
 
 func NewDNSError(reason DNSErr, response *dns.Msg) *DNSError {
-	return &DNSError{reason: reason, response: response}
+	return &DNSError{Reason: reason, Response: response}
 }
 
 func (e *DNSError) Error() string {
-	if e.reason == DNSErrRcodeNotSuccess {
-		return fmt.Sprintf("%s: %s (rcode=%d)", DNSErrToString[e.reason],
-			dns.RcodeToString[e.response.Rcode], e.response.Rcode)
+	if e.Reason == DNSErrRcodeNotSuccess {
+		return fmt.Sprintf("%s: %s (rcode=%d)", DNSErrToString[e.Reason],
+			dns.RcodeToString[e.Response.Rcode], e.Response.Rcode)
 	}
-	return fmt.Sprintf("%s", DNSErrToString[e.reason])
+	return fmt.Sprintf("%s", DNSErrToString[e.Reason])
 }
 
 func NewMsg(config *Config, name string, qtype uint16) *dns.Msg {
@@ -125,7 +127,7 @@ func Query(c Client, name string, qtype uint16) (*dns.Msg, error) {
 		for _, rr := range resp.Answer {
 			if rr.Header().Rrtype == qtype {
 				ans = append(ans, rr)
-				// if such an RR matches on the name we'r searching for, it's a
+				// if such an RR matches on the name we're searching for, it's a
 				// direct hit
 				if rr.Header().Name == name {
 					return resp, nil
@@ -174,77 +176,4 @@ func Query(c Client, name string, qtype uint16) (*dns.Msg, error) {
 	}
 
 	return nil, NewDNSError(DNSErrMissingAnswer, resp)
-}
-
-func GetIP4s(c Client, name string) ([]netip.Addr, error) {
-	resp, err := Query(c, name, dns.TypeA)
-	if err != nil {
-		return nil, err
-	}
-	addrRecs := msgutil.CollectARecords(resp.Answer)
-	if len(addrRecs) == 0 {
-		mu.BUG("expected successful DNS query to return one or more A records, but returned none")
-	}
-	return functools.Map(addrRecs, func(a *msgutil.AddressRecord) netip.Addr {
-		return a.Addr
-	}), nil
-}
-
-func GetIP6s(c Client, name string) ([]netip.Addr, error) {
-	resp, err := Query(c, name, dns.TypeAAAA)
-	if err != nil {
-		return nil, err
-	}
-	addrRecs := msgutil.CollectAAAARecords(resp.Answer)
-	if len(addrRecs) == 0 {
-		mu.BUG("expected succssful DNS query to return one ore more AAAA records, but returned none")
-	}
-	return functools.Map(addrRecs, func(a *msgutil.AddressRecord) netip.Addr {
-		return a.Addr
-	}), nil
-}
-
-func GetIPs(c Client, name string) ([]netip.Addr, error) {
-	var addrs []netip.Addr
-	var errs []error
-
-	a, err := GetIP4s(c, name)
-	if err != nil {
-		errs = append(errs, err)
-	} else {
-		addrs = append(addrs, a...)
-	}
-
-	a, err = GetIP6s(c, name)
-	if err != nil {
-		errs = append(errs, err)
-	} else {
-		addrs = append(addrs, a...)
-	}
-
-	if len(addrs) > 0 {
-		return addrs, nil
-	}
-
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
-	}
-
-	mu.BUG("nither addresses nor errors")
-	return nil, nil
-}
-
-type NameServer struct {
-	Name  string
-	Addrs []netip.Addr
-}
-
-func GetNameServers(c Client, name string) ([]*NameServer, error) {
-	resp, err := Query(c, name, dns.TypeNS)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Printf("A\n%v\n", resp)
-	return nil, nil
 }

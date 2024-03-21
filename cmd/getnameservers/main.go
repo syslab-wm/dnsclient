@@ -4,11 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/syslab-wm/dnsclient"
+	"github.com/syslab-wm/dnsclient/internal/defaults"
+	"github.com/syslab-wm/dnsclient/internal/netx"
+	"github.com/syslab-wm/functools"
 	"github.com/syslab-wm/mu"
 )
 
@@ -19,7 +23,6 @@ Get a list of namservers (their domainnames and IP addresses) for a given domain
 positional arguments:
   DOMAINNAME
     The domainname to get the nameservers for
-
     
 general options:
   -proto PROTO
@@ -54,6 +57,10 @@ general options:
 
     Default: 0
 
+  -dnssec
+    Request DNSSEC records be sent by setting the DNSSEC OK bit (DO) in the OPT
+    record in the additional section of the query.
+
   -help
     Display this usage statement and exit.
 
@@ -67,18 +74,8 @@ Do53-specific options:
 
 
 examples:
-  $ ./dnsclient -proto doh -qtype NS www.cs.wm.edu
+  $ ./getnameservesr www.cs.wm.edu
 `
-
-const (
-	defaultDo53Server = "1.1.1.1:53"
-	defaultDo53Port   = "53"
-	defaultDoTServer  = "1.1.1.1:853"
-	defaultDoTPort    = "853"
-	defaultDoHURL     = "https://cloudflare-dns.com/dns-query"
-	defaultTimeout    = 2 * time.Second
-	defaultMaxCNAMEs  = 0
-)
 
 type Options struct {
 	// positional
@@ -88,6 +85,7 @@ type Options struct {
 	server    string
 	timeout   time.Duration
 	maxCNAMEs int
+	dnssec    bool
 	// do53-specific options
 	tcp          bool
 	retryWithTCP bool
@@ -97,34 +95,26 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "%s", usage)
 }
 
-func tryAddDefaultPort(server string, port string) (string, error) {
-	_, _, err := net.SplitHostPort(server)
-	if err == nil {
-		return server, nil
+func tryAddDefaultPort(server string, port string) string {
+	if netx.HasPort(server) {
+		return server
 	}
-
-	server1 := fmt.Sprintf("%s:%s", server, port)
-	_, _, err = net.SplitHostPort(server1)
-	if err == nil {
-		return server1, nil
-	}
-
-	return "", fmt.Errorf("invalid server name %q", server)
+	return net.JoinHostPort(server, port)
 }
 
 func parseOptions() *Options {
-	var err error
-	options := Options{}
+	opts := Options{}
 
 	flag.Usage = printUsage
 	// general options
-	flag.StringVar(&options.proto, "proto", "do53", "")
-	flag.StringVar(&options.server, "server", "", "")
-	flag.DurationVar(&options.timeout, "timeout", defaultTimeout, "")
-	flag.IntVar(&options.maxCNAMEs, "max-cnames", defaultMaxCNAMEs, "")
+	flag.StringVar(&opts.proto, "proto", "do53", "")
+	flag.StringVar(&opts.server, "server", "", "")
+	flag.DurationVar(&opts.timeout, "timeout", defaults.Timeout, "")
+	flag.IntVar(&opts.maxCNAMEs, "max-cnames", defaults.MaxCNAMEs, "")
+	flag.BoolVar(&opts.dnssec, "dnssec", false, "")
 	// do53-specific options
-	flag.BoolVar(&options.tcp, "tcp", false, "")
-	flag.BoolVar(&options.retryWithTCP, "retry-with-tcp", false, "")
+	flag.BoolVar(&opts.tcp, "tcp", false, "")
+	flag.BoolVar(&opts.retryWithTCP, "retry-with-tcp", false, "")
 
 	flag.Parse()
 
@@ -132,108 +122,109 @@ func parseOptions() *Options {
 		mu.Fatalf("error: expected one positional argument but got %d", flag.NArg())
 	}
 
-	options.domainname = flag.Arg(0)
+	opts.domainname = flag.Arg(0)
 
-	options.proto = strings.ToLower(options.proto)
-	if options.proto != "do53" && options.proto != "dot" && options.proto != "doh" {
-		mu.Fatalf("error: unrecognized proto %q: must be either \"do53\", \"dot\", or \"doh\"", options.proto)
+	opts.proto = strings.ToLower(opts.proto)
+	if opts.proto != "do53" && opts.proto != "dot" && opts.proto != "doh" {
+		mu.Fatalf("error: unrecognized proto %q: must be either \"do53\", \"dot\", or \"doh\"", opts.proto)
 	}
 
-	if options.proto == "do53" {
-		if options.tcp && options.retryWithTCP {
+	if opts.proto == "do53" {
+		if opts.tcp && opts.retryWithTCP {
 			mu.Fatalf("error: can't specify both -tcp and -retry-with-tcp")
 		}
 
-		if options.server == "" {
-			options.server = defaultDo53Server
+		if opts.server == "" {
+			opts.server = defaults.Do53Server
 		} else {
-			options.server, err = tryAddDefaultPort(options.server, defaultDo53Port)
-			if err != nil {
-				mu.Fatalf("error: %v", err)
-			}
+			opts.server = tryAddDefaultPort(opts.server, defaults.Do53Port)
 		}
 	}
 
-	if options.proto != "do53" {
-		if options.tcp {
+	if opts.proto != "do53" {
+		if opts.tcp {
 			mu.Fatalf("error: -tcp is only valid for -proto do53")
 		}
-		if options.retryWithTCP {
+		if opts.retryWithTCP {
 			mu.Fatalf("error: -retry-with-tcp is only valid for -proto do53")
 		}
 	}
 
-	if options.proto == "dot" {
-		if options.server == "" {
-			options.server = defaultDoTServer
+	if opts.proto == "dot" {
+		if opts.server == "" {
+			opts.server = defaults.DoTServer
 		} else {
-			options.server, err = tryAddDefaultPort(options.server, defaultDoTPort)
-			if err != nil {
-				mu.Fatalf("error: %v", err)
-			}
+			opts.server = tryAddDefaultPort(opts.server, defaults.DoTPort)
 		}
 	}
 
-	if options.proto == "doh" {
-		if options.server == "" {
-			options.server = defaultDoHURL
+	if opts.proto == "doh" {
+		if opts.server == "" {
+			opts.server = defaults.DoHURL
 		}
-		// TODO: parse the options.server URL to make sure it is a valid HTTPS url
+		// TODO: parse the opts.server URL to make sure it is a valid HTTPS url
 	}
 
-	return &options
+	return &opts
 }
 
-func main() {
+func newClient(opts *Options) dnsclient.Client {
 	var c dnsclient.Client
 
-	options := parseOptions()
+	baseConfig := dnsclient.Config{
+		RecursionDesired: true,
+		Timeout:          opts.timeout,
+		MaxCNAMEs:        opts.maxCNAMEs,
+		DNSSEC:           opts.dnssec,
+	}
 
-	switch options.proto {
+	switch opts.proto {
 	case "do53":
 		config := &dnsclient.Do53Config{
-			Config: dnsclient.Config{
-				RecursionDesired: true,
-				Timeout:          options.timeout,
-				MaxCNAMEs:        options.maxCNAMEs,
-			},
-			UseTCP:       options.tcp,
-			RetryWithTCP: options.retryWithTCP,
-			Server:       options.server,
+			Config:       baseConfig,
+			UseTCP:       opts.tcp,
+			RetryWithTCP: opts.retryWithTCP,
+			Server:       opts.server,
 		}
 		c = dnsclient.NewDo53Client(config)
 	case "dot":
 		config := &dnsclient.DoTConfig{
-			Config: dnsclient.Config{
-				RecursionDesired: true,
-				Timeout:          options.timeout,
-				MaxCNAMEs:        options.maxCNAMEs,
-			},
-			Server: options.server,
+			Config: baseConfig,
+			Server: opts.server,
 		}
 		c = dnsclient.NewDoTClient(config)
 	case "doh":
 		config := &dnsclient.DoHConfig{
-			Config: dnsclient.Config{
-				RecursionDesired: true,
-				Timeout:          options.timeout,
-				MaxCNAMEs:        options.maxCNAMEs,
-			},
-			URL: options.server,
+			Config: baseConfig,
+			URL:    opts.server,
 		}
 		c = dnsclient.NewDoHClient(config)
 	default:
-		mu.BUG("invalid proto %q", options.proto)
+		mu.BUG("invalid proto %q", opts.proto)
 	}
 
+	return c
+}
+
+func main() {
+	opts := parseOptions()
+
+	c := newClient(opts)
 	err := c.Dial()
 	if err != nil {
 		mu.Fatalf("failed to connect to DNS server: %v", err)
 	}
 	defer c.Close()
 
-	_, err = dnsclient.GetNameServers(c, options.domainname)
+	nameServers, err := dnsclient.GetNameServers(c, opts.domainname)
 	if err != nil {
 		mu.Fatalf("query failed: %v", err)
+	}
+
+	for _, nameServer := range nameServers {
+		strAddrs := functools.Map[netip.Addr, string](nameServer.Addrs, func(addr netip.Addr) string {
+			return fmt.Sprintf("%v", addr)
+		})
+		fmt.Printf("%s: %s\n", nameServer.Name, strings.Join(strAddrs, " "))
 	}
 }

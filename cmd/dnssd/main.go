@@ -9,6 +9,8 @@ import (
 
 	"github.com/syslab-wm/adt/set"
 	"github.com/syslab-wm/dnsclient"
+	"github.com/syslab-wm/dnsclient/internal/defaults"
+	"github.com/syslab-wm/dnsclient/internal/netx"
 	"github.com/syslab-wm/mu"
 )
 
@@ -42,11 +44,6 @@ examples:
   $ ./dnssd www.cs.wm.edu
 `
 
-const (
-	defaultDo53Server = "1.1.1.1:53"
-	defaultDo53Port   = "53"
-)
-
 type Options struct {
 	// positional
 	domain string
@@ -60,30 +57,21 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "%s", usage)
 }
 
-func tryAddDefaultPort(server string, port string) (string, error) {
-	_, _, err := net.SplitHostPort(server)
-	if err == nil {
-		return server, nil
+func tryAddDefaultPort(server string, port string) string {
+	if netx.HasPort(server) {
+		return server
 	}
-
-	server1 := fmt.Sprintf("%s:%s", server, port)
-	_, _, err = net.SplitHostPort(server1)
-	if err == nil {
-		return server1, nil
-	}
-
-	return "", fmt.Errorf("invalid server name %q", server)
+	return net.JoinHostPort(server, port)
 }
 
 func parseOptions() *Options {
-	var err error
 	opts := Options{}
 
 	flag.Usage = printUsage
 	// general options
-	flag.StringVar(&opts.server, "server", defaultDo53Server, "")
+	flag.StringVar(&opts.server, "server", defaults.Do53Server, "")
 	flag.BoolVar(&opts.tcp, "tcp", false, "")
-	flag.DurationVar(&opts.timeout, "timeout", 2*time.Second, "")
+	flag.DurationVar(&opts.timeout, "timeout", defaults.Timeout, "")
 
 	flag.Parse()
 
@@ -92,10 +80,7 @@ func parseOptions() *Options {
 	}
 
 	opts.domain = flag.Arg(0)
-	opts.server, err = tryAddDefaultPort(opts.server, defaultDo53Port)
-	if err != nil {
-		mu.Fatalf("error: %v", err)
-	}
+	opts.server = tryAddDefaultPort(opts.server, defaults.Do53Port)
 
 	return &opts
 }
@@ -121,48 +106,44 @@ func main() {
 	}
 	defer c.Close()
 
-	/* TODO: need to distinguish errors from non domains found */
-	browserDomains, err := dnsclient.GetAllServiceBrowserDomains(c, opts.domain)
-	if err != nil {
-		mu.Fatalf("QueryAllServiceBrowserDomains: %v", err)
-	}
-
-	fmt.Printf("Service Browser Domains:\n")
-	for _, browser := range browserDomains {
-		fmt.Printf("\t%s\n", browser)
+	browsers, err := dnsclient.GetAllServiceBrowserDomains(c, opts.domain)
+	if browsers != nil {
+		fmt.Printf("Service Browser Domains:\n")
+		for _, browser := range browsers {
+			fmt.Printf("\t%s\n", browser)
+		}
+	} else {
+		// if we don't find any browsing domains, treat the original
+		// domain as the browsing domain
+		browsers = []string{opts.domain}
 	}
 
 	serviceSet := set.New[string]()
-	for _, browser := range browserDomains {
-		services, err := dnsclient.EnumerateServices(c, browser)
+	for _, browser := range browsers {
+		services, err := dnsclient.GetServices(c, browser)
 		if err != nil {
 			continue
 		}
 		serviceSet.Add(services...)
 	}
 
-	for _, service := range serviceSet.Items() {
-		fmt.Printf("\t%s\n", service)
+	services := serviceSet.Items()
+
+	if len(services) != 0 {
+		fmt.Printf("Services:\n")
+		for _, service := range serviceSet.Items() {
+			fmt.Printf("\t%s\n", service)
+			instances, err := dnsclient.GetServiceInstances(c, service)
+			if err != nil {
+				continue
+			}
+			for _, instance := range instances {
+				info, err := dnsclient.GetServiceInstanceInfo(c, instance)
+				if err != nil {
+					continue
+				}
+				fmt.Printf("\t\t%v\n", info)
+			}
+		}
 	}
-
-	/*
-
-	   instanceSet = set.New[string]()
-	   for _, service := range serviceSet.Items() {
-	       instances, err := dnsclient.EnumerateServiceInstances(c,) ([]string, error)
-	       if err != nil {
-	           continue
-	       }
-	       instanceSet.Add(services...)
-	   }
-
-
-	   for _, instance := range instanceSet.Items() {
-	       info, err := QueryServiceInstanceInfo(c, ...)
-	       if err != nil {
-	           continue
-	       }
-	       fmt.Printf("%s: %v\n", instance, info)
-	   }
-	*/
 }

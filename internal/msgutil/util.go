@@ -1,8 +1,6 @@
 package msgutil
 
 import (
-	"net/netip"
-
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/functools"
 )
@@ -29,6 +27,7 @@ func CollectRRsByU16Type(rrs []dns.RR, rrtype uint16) []dns.RR {
 }
 */
 
+/*
 // Covers both A and AAAA records
 type AddressRecord struct {
 	Name string
@@ -72,6 +71,7 @@ func CollectAAAARecords(rrs []dns.RR) []*AddressRecord {
 
 	return addrRecs
 }
+*/
 
 // OrderCNAMEs takes a slice of *[github.com/miekg/dns.CNAME] and attempts to
 // the sort the slice such that entry i's Target is entry i's Name.  We call
