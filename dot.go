@@ -45,8 +45,7 @@ func (c *DoTClient) Close() error {
 	return c.conn.Close()
 }
 
-func (c *DoTClient) Query(name string, qtype uint16) (*dns.Msg, error) {
-	req := NewMsg(&c.config.Config, name, qtype)
+func (c *DoTClient) Query(req *dns.Msg) (*dns.Msg, error) {
 	resp, _, err := c.client.ExchangeWithConn(req, c.conn)
 	return resp, err
 }

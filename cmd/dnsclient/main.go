@@ -230,7 +230,7 @@ func main() {
 	}
 	defer c.Close()
 
-	resp, err := dnsclient.Query(c, opts.qname, opts.qtype)
+	resp, err := dnsclient.Lookup(c, opts.qname, opts.qtype)
 	if err != nil {
 		mu.Fatalf("query failed: %v", err)
 	}

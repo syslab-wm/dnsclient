@@ -51,8 +51,7 @@ func newHTTPPostRequest(url string, postData []byte) (*http.Request, error) {
 }
 
 // Raw Query
-func (c *DoHClient) Query(name string, qtype uint16) (*dns.Msg, error) {
-	req := NewMsg(&c.config.Config, name, qtype)
+func (c *DoHClient) Query(req *dns.Msg) (*dns.Msg, error) {
 	msg, err := req.Pack()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DNS request %w", err)

@@ -11,8 +11,8 @@ import (
 	"github.com/syslab-wm/mu"
 )
 
-func doAQuery(c Client, domain string) ([]*dns.A, error) {
-	resp, err := Query(c, domain, dns.TypeA)
+func lookupA(c Client, domain string) ([]*dns.A, error) {
+	resp, err := Lookup(c, domain, dns.TypeA)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func doAQuery(c Client, domain string) ([]*dns.A, error) {
 func getA(c Client, domain string) ([]netip.Addr, error) {
 	var addrs []netip.Addr
 
-	as, err := doAQuery(c, domain)
+	as, err := lookupA(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -42,8 +42,8 @@ func getA(c Client, domain string) ([]netip.Addr, error) {
 	return addrs, nil
 }
 
-func doAAAAQuery(c Client, domain string) ([]*dns.AAAA, error) {
-	resp, err := Query(c, domain, dns.TypeAAAA)
+func lookupAAAA(c Client, domain string) ([]*dns.AAAA, error) {
+	resp, err := Lookup(c, domain, dns.TypeAAAA)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func doAAAAQuery(c Client, domain string) ([]*dns.AAAA, error) {
 func getAAAA(c Client, domain string) ([]netip.Addr, error) {
 	var addrs []netip.Addr
 
-	as, err := doAAAAQuery(c, domain)
+	as, err := lookupAAAA(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -120,8 +120,8 @@ func (ns *NameServer) String() string {
 	return fmt.Sprintf("name: %s, addrs: %v", ns.Name, ns.Addrs)
 }
 
-func doNSQuery(c Client, domain string) ([]*dns.NS, error) {
-	resp, err := Query(c, domain, dns.TypeNS)
+func lookupNS(c Client, domain string) ([]*dns.NS, error) {
+	resp, err := Lookup(c, domain, dns.TypeNS)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func doNSQuery(c Client, domain string) ([]*dns.NS, error) {
 func getNS(c Client, domain string) ([]string, error) {
 	var nameServers []string
 
-	nses, err := doNSQuery(c, domain)
+	nses, err := lookupNS(c, domain)
 	if err == nil {
 		nameServers = functools.Map[*dns.NS, string](nses, func(ns *dns.NS) string {
 			return ns.Ns

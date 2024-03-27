@@ -22,7 +22,7 @@ type Client interface {
 	GetConfig() *Config
 	Dial() error
 	Close() error
-	Query(name string, qtype uint16) (*dns.Msg, error)
+	Query(req *dns.Msg) (*dns.Msg, error)
 }
 
 type DNSErr int
@@ -78,8 +78,8 @@ func NewMsg(config *Config, name string, qtype uint16) *dns.Msg {
 	return m
 }
 
-func query(c Client, name string, qtype uint16) (*dns.Msg, error) {
-	resp, err := c.Query(name, qtype)
+func query(c Client, req *dns.Msg) (*dns.Msg, error) {
+	resp, err := c.Query(req)
 	if err != nil {
 		return nil, err
 	}
@@ -109,15 +109,21 @@ func query(c Client, name string, qtype uint16) (*dns.Msg, error) {
 // to inspect the msg to see if the query succeeded; if the caller wants the
 // nitty-gritty details of why the query didn't get an answer, it can inspect
 // the error value.
-func Query(c Client, name string, qtype uint16) (*dns.Msg, error) {
+func Query(c Client, req *dns.Msg) (*dns.Msg, error) {
 	var err error
 	var cnames []*dns.CNAME
 	var resp *dns.Msg
 	config := c.GetConfig()
+	qtype := req.Question[0].Qtype
 
-	name = dns.Fqdn(name)
+	// if following CNAMES, req will change; thus, make a copy so it
+	// doesn't affect the caller
+	if config.MaxCNAMEs > 0 {
+		req = req.Copy()
+	}
+
 	for i := 0; i <= config.MaxCNAMEs; i++ {
-		resp, err = query(c, name, qtype)
+		resp, err = query(c, req)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +135,7 @@ func Query(c Client, name string, qtype uint16) (*dns.Msg, error) {
 				ans = append(ans, rr)
 				// if such an RR matches on the name we're searching for, it's a
 				// direct hit
-				if rr.Header().Name == name {
+				if rr.Header().Name == req.Question[0].Name {
 					return resp, nil
 				}
 			}
@@ -148,7 +154,7 @@ func Query(c Client, name string, qtype uint16) (*dns.Msg, error) {
 
 		}
 		// the head of the chain must match the name we're searching for
-		if cnames[0].Hdr.Name != name {
+		if cnames[0].Hdr.Name != req.Question[0].Name {
 			return nil, NewDNSError(DNSErrInvalidCNAMEChain, resp)
 		}
 
@@ -167,8 +173,8 @@ func Query(c Client, name string, qtype uint16) (*dns.Msg, error) {
 			return nil, NewDNSError(DNSErrInvalidAnswer, resp)
 		}
 
-		// update the domain name to query
-		name = dns.Fqdn(cnames[len(cnames)-1].Target)
+		// update the domain name to query; TODO: get Qtype
+		req.SetQuestion(dns.Fqdn(cnames[len(cnames)-1].Target), qtype)
 	}
 
 	if len(cnames) > 0 {
@@ -176,4 +182,9 @@ func Query(c Client, name string, qtype uint16) (*dns.Msg, error) {
 	}
 
 	return nil, NewDNSError(DNSErrMissingAnswer, resp)
+}
+
+func Lookup(c Client, name string, qtype uint16) (*dns.Msg, error) {
+	req := NewMsg(c.GetConfig(), name, qtype)
+	return Query(c, req)
 }

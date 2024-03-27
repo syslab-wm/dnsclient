@@ -12,16 +12,16 @@ import (
 	"github.com/syslab-wm/mu"
 )
 
-func doPTRQuery(c Client, domain string) ([]*dns.PTR, error) {
-	resp, err := Query(c, domain, dns.TypePTR)
+func lookupPTR(c Client, domain string) ([]*dns.PTR, error) {
+	resp, err := Lookup(c, domain, dns.TypePTR)
 	if err != nil {
 		return nil, err
 	}
 	return msgutil.CollectRRs[*dns.PTR](resp.Answer), nil
 }
 
-func doPTRQuerySingleAnswer(c Client, domain string) (*dns.PTR, error) {
-	ptrs, err := doPTRQuery(c, domain)
+func lookupOnePTR(c Client, domain string) (*dns.PTR, error) {
+	ptrs, err := lookupPTR(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func doPTRQuerySingleAnswer(c Client, domain string) (*dns.PTR, error) {
 }
 
 func getPTR(c Client, domain string) ([]string, error) {
-	ptrs, err := doPTRQuery(c, domain)
+	ptrs, err := lookupPTR(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -39,40 +39,40 @@ func getPTR(c Client, domain string) ([]string, error) {
 	return domains, nil
 }
 
-func getPTRSingleAnswer(c Client, domain string) (string, error) {
-	ptr, err := doPTRQuerySingleAnswer(c, domain)
+func getOnePTR(c Client, domain string) (string, error) {
+	ptr, err := lookupOnePTR(c, domain)
 	if err != nil {
 		return "", err
 	}
 	return ptr.Ptr, nil
 }
 
-func doSRVQuery(c Client, domain string) ([]*dns.SRV, error) {
-	resp, err := Query(c, domain, dns.TypeSRV)
+func lookupSRV(c Client, domain string) ([]*dns.SRV, error) {
+	resp, err := Lookup(c, domain, dns.TypeSRV)
 	if err != nil {
 		return nil, err
 	}
 	return msgutil.CollectRRs[*dns.SRV](resp.Answer), nil
 }
 
-func doSRVQuerySingleAnswer(c Client, domain string) (*dns.SRV, error) {
-	srvs, err := doSRVQuery(c, domain)
+func lookupOneSRV(c Client, domain string) (*dns.SRV, error) {
+	srvs, err := lookupSRV(c, domain)
 	if err != nil {
 		return nil, err
 	}
 	return srvs[0], nil
 }
 
-func doTXTQuery(c Client, domain string) ([]*dns.TXT, error) {
-	resp, err := Query(c, domain, dns.TypeTXT)
+func lookupTXT(c Client, domain string) ([]*dns.TXT, error) {
+	resp, err := Lookup(c, domain, dns.TypeTXT)
 	if err != nil {
 		return nil, err
 	}
 	return msgutil.CollectRRs[*dns.TXT](resp.Answer), nil
 }
 
-func doTXTQuerySingleAnswer(c Client, domain string) (*dns.TXT, error) {
-	txts, err := doTXTQuery(c, domain)
+func lookupOneTXT(c Client, domain string) (*dns.TXT, error) {
+	txts, err := lookupTXT(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func doTXTQuerySingleAnswer(c Client, domain string) (*dns.TXT, error) {
 }
 
 func getTXT(c Client, domain string) ([][]string, error) {
-	txts, err := doTXTQuery(c, domain)
+	txts, err := lookupTXT(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +90,8 @@ func getTXT(c Client, domain string) ([][]string, error) {
 	return values, nil
 }
 
-func getTXTSingleAnswer(c Client, domain string) ([]string, error) {
-	txt, err := doTXTQuerySingleAnswer(c, domain)
+func getOneTXT(c Client, domain string) ([]string, error) {
+	txt, err := lookupOneTXT(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -105,12 +105,12 @@ func GetServiceBrowserDomains(c Client, domain string) ([]string, error) {
 
 func GetDefaultServiceBrowserDomain(c Client, domain string) (string, error) {
 	fauxDomain := fmt.Sprintf("db._dns-sd._udp.%s", domain)
-	return getPTRSingleAnswer(c, fauxDomain)
+	return getOnePTR(c, fauxDomain)
 }
 
 func GetLegacyServiceBrowserDomain(c Client, domain string) (string, error) {
 	fauxDomain := fmt.Sprintf("lb._dns-sd._udp.%s", domain)
-	return getPTRSingleAnswer(c, fauxDomain)
+	return getOnePTR(c, fauxDomain)
 }
 
 func GetAllServiceBrowserDomains(c Client, domain string) ([]string, error) {
@@ -182,7 +182,7 @@ func GetServiceInstanceInfo(c Client, domain string) (*ServiceInstanceInfo, erro
 	info := new(ServiceInstanceInfo)
 
 	// SRV must succeed
-	srv, err := doSRVQuerySingleAnswer(c, domain)
+	srv, err := lookupOneSRV(c, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func GetServiceInstanceInfo(c Client, domain string) (*ServiceInstanceInfo, erro
 	info.Target = srv.Target
 
 	// not an error if TXT doesn't succeed
-	value, err := getTXTSingleAnswer(c, domain)
+	value, err := getOneTXT(c, domain)
 	if err == nil {
 		info.Txt = value
 	}
