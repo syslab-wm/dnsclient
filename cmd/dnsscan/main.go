@@ -18,9 +18,9 @@ import (
 	"github.com/syslab-wm/mu"
 )
 
-const usage = `prodcon2 [options] INPUT_FILE
+const usage = `dnsscan [options] INPUT_FILE
 
-Example of a producer-consumer problem.
+Issue a DNS query to each domainname in INPUT_FILE.
 
 positional
   INPUT_FILE

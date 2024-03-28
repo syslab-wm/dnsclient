@@ -138,11 +138,12 @@ func main() {
 				continue
 			}
 			for _, instance := range instances {
+				fmt.Printf("\t\t%s\n", instance)
 				info, err := dnsclient.GetServiceInstanceInfo(c, instance)
 				if err != nil {
 					continue
 				}
-				fmt.Printf("\t\t%v\n", info)
+				fmt.Printf("\t\t\t%v\n", info)
 			}
 		}
 	}
