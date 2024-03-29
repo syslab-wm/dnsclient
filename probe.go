@@ -9,7 +9,7 @@ import (
 )
 
 func ProbeSupportsEDNS0Subnet(c Client, domainname string) (bool, error) {
-	msg := NewMsg(c.GetConfig(), domainname, dns.TypeSOA)
+	msg := NewMsg(c.Config(), domainname, dns.TypeSOA)
 
 	// create an OPT RR
 	o := new(dns.OPT)
@@ -51,7 +51,7 @@ func ProbeSupportsEDNS0Subnet(c Client, domainname string) (bool, error) {
 }
 
 func ProbeNSID(c Client, domainname string) (string, error) {
-	msg := NewMsg(c.GetConfig(), domainname, dns.TypeSOA)
+	msg := NewMsg(c.Config(), domainname, dns.TypeSOA)
 
 	// create an OPT RR
 	o := new(dns.OPT)

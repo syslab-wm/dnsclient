@@ -10,28 +10,19 @@ import (
 	"github.com/miekg/dns"
 )
 
-type DoHConfig struct {
-	Config
-	URL string
-}
-
 type DoHClient struct {
-	config *DoHConfig
+	config *Config
 	client *http.Client
 }
 
-func NewDoHClient(config *DoHConfig) *DoHClient {
+func newDoHClient(config *Config) *DoHClient {
 	c := &DoHClient{config: config}
 	c.client = &http.Client{Timeout: config.Timeout}
 	return c
 }
 
-func (c *DoHClient) GetConfig() *Config {
-	return &c.config.Config
-}
-
-func (c *DoHClient) Dial() error {
-	return nil
+func (c *DoHClient) Config() *Config {
+	return c.config
 }
 
 func (c *DoHClient) Close() error {
@@ -50,14 +41,14 @@ func newHTTPPostRequest(url string, postData []byte) (*http.Request, error) {
 	return req, nil
 }
 
-// Raw Query
 func (c *DoHClient) Query(req *dns.Msg) (*dns.Msg, error) {
 	msg, err := req.Pack()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DNS request %w", err)
 	}
 
-	post, err := newHTTPPostRequest(c.config.URL, msg)
+	url := fmt.Sprintf("https:%s%s", c.config.Server, c.config.HTTPEndpoint)
+	post, err := newHTTPPostRequest(url, msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}

@@ -1,6 +1,8 @@
 package msgutil
 
 import (
+	"fmt"
+
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/functools"
 )
@@ -109,4 +111,16 @@ func OrderCNAMEs(a []*dns.CNAME) bool {
 	}
 
 	return n == len(a)
+}
+
+func AddNSID(m *dns.Msg) error {
+	opt := m.IsEdns0()
+	if opt == nil {
+		return fmt.Errorf("Cannot add NSID option: message does not have an OPT RR")
+	}
+	e := new(dns.EDNS0_NSID)
+	e.Code = dns.EDNS0NSID
+	opt.Option = append(opt.Option, e)
+
+	return nil
 }

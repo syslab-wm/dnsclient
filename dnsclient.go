@@ -1,80 +1,62 @@
 package dnsclient
 
 import (
-	"fmt"
-	"time"
-
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/dnsclient/internal/msgutil"
 )
 
-// This is configuration that applies to all typs of clients -- it deals purely
-// with the handling of the DNS requests and responses
-type Config struct {
-	IdFunc           func() uint16
-	RecursionDesired bool
-	Timeout          time.Duration
-	MaxCNAMEs        int
-	DNSSEC           bool
-}
-
 type Client interface {
-	GetConfig() *Config
-	Dial() error
-	Close() error
+	Config() *Config
 	Query(req *dns.Msg) (*dns.Msg, error)
+	Close() error
 }
 
-type DNSErr int
-
-const (
-	DNSErrRcodeNotSuccess DNSErr = iota
-
-	DNSErrMissingAnswer
-	DNSErrInvalidAnswer
-	DNSErrInvalidCNAMEChain
-	DNSErrMaxCNAMEs
-
-	DNSErrBadFormatAnswer
-)
-
-var DNSErrToString = map[DNSErr]string{
-	DNSErrRcodeNotSuccess: "RCODE was not SUCCESS",
-
-	DNSErrMissingAnswer:     "DNS response does not answer the query",
-	DNSErrInvalidAnswer:     "DNS response has an answer that matches neither the qname nor one of its aliases",
-	DNSErrInvalidCNAMEChain: "DNS response contains an invalid CNAME chain",
-	DNSErrMaxCNAMEs:         "query followed max number of CNAMEs",
-
-	DNSErrBadFormatAnswer: "DNS response has an answer where the data does not conform to the RR type",
-}
-
-type DNSError struct {
-	Reason   DNSErr
-	Response *dns.Msg // optional
-}
-
-func NewDNSError(reason DNSErr, response *dns.Msg) *DNSError {
-	return &DNSError{Reason: reason, Response: response}
-}
-
-func (e *DNSError) Error() string {
-	if e.Reason == DNSErrRcodeNotSuccess {
-		return fmt.Sprintf("%s: %s (rcode=%d)", DNSErrToString[e.Reason],
-			dns.RcodeToString[e.Response.Rcode], e.Response.Rcode)
+func New(config *Config) (Client, error) {
+	err := config.Validate()
+	if err != nil {
+		return nil, err
 	}
-	return fmt.Sprintf("%s", DNSErrToString[e.Reason])
+	if config.HTTPEndpoint != "" {
+		return newDoHClient(config), nil
+	}
+	if config.TLS {
+		return newDoTClient(config), nil
+	}
+	return newDo53Client(config), nil
 }
 
 func NewMsg(config *Config, name string, qtype uint16) *dns.Msg {
+	var bufsize int
+	var usesEDNS0 bool
+
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(name), qtype)
+
 	m.Id = dns.Id()
-	m.RecursionDesired = config.RecursionDesired
-	if config.DNSSEC {
-		m.SetEdns0(4096, true)
+	m.RecursionDesired = config.RD
+	m.AuthenticatedData = config.AD
+	m.CheckingDisabled = config.CD
+
+	if config.UDPBufSize == 0 {
+		bufsize = DefaultUDPBufSize
+	} else {
+		bufsize = config.UDPBufSize
+		usesEDNS0 = true
 	}
-	// XXX: set other header bits?
+
+	if config.DO {
+		usesEDNS0 = true
+	} else if config.NSID {
+		usesEDNS0 = true
+	}
+
+	if usesEDNS0 {
+		m.SetEdns0(uint16(bufsize), config.DO)
+	}
+	if config.NSID {
+		msgutil.AddNSID(m)
+	}
+
 	return m
 }
 
@@ -113,7 +95,7 @@ func Query(c Client, req *dns.Msg) (*dns.Msg, error) {
 	var err error
 	var cnames []*dns.CNAME
 	var resp *dns.Msg
-	config := c.GetConfig()
+	config := c.Config()
 	qtype := req.Question[0].Qtype
 
 	// if following CNAMES, req will change; thus, make a copy so it
@@ -185,6 +167,6 @@ func Query(c Client, req *dns.Msg) (*dns.Msg, error) {
 }
 
 func Lookup(c Client, name string, qtype uint16) (*dns.Msg, error) {
-	req := NewMsg(c.GetConfig(), name, qtype)
+	req := NewMsg(c.Config(), name, qtype)
 	return Query(c, req)
 }

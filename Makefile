@@ -1,4 +1,5 @@
-progs = dnsclient dnsscan dnssd getips getnameservers probe
+#progs = dnsclient dnsscan dnssd getips getnameservers probe
+progs = dnsclient
 
 all: $(progs)
 
