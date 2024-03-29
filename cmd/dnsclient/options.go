@@ -54,16 +54,21 @@ query options:
 
     Default: 0
 
-  -https[=ENDPOINT]
+  -https ENDPOINT
     Use DNS over HTTPS (DoH).  Th port number defaults to 443.  The HTTP POST
     request mode is used when sending the query.
 
-    If value is specified, it will be used as the HTTP endpoint in the query URI;
-    the default is /dns-query.  For example, dnsclient -server example.com -https
+    ENDPOINT is the HTTP endpoint in the query URI.  There is no standard value
+    for ENDPOINT, though /dns-query is conventional.
+
+    For example:
+
+        dnsclient -server example.com -https /dnsquery foo.bar.example.com
+
     will use the URI https://example.com/dnsquery
 
-  -https-get[=ENDPOINT]
-    Same as -https, except that th eHTTP GET request mode is used when sending
+  -https-get ENDPOINT
+    Same as -https, except that the HTTP GET request mode is used when sending
     the query.
 
   -keepalive[=0|1]
@@ -189,8 +194,8 @@ func parseOptions() *Options {
 	flag.IntVar(&opts.bufsize, "bufsize", 0, "")
 	flag.BoolVar(&opts.cdflag, "cdflag", false, "")
 	flag.BoolVar(&opts.dnssec, "dnnsec", false, "")
-	flag.StringVar(&opts.https, "https", dnsclient.DefaultHTTPEndpoint, "")
-	flag.StringVar(&opts.httpsGET, "https-get", dnsclient.DefaultHTTPEndpoint, "")
+	flag.StringVar(&opts.https, "https", "", "")
+	flag.StringVar(&opts.httpsGET, "https-get", "", "")
 	flag.BoolVar(&opts.ignore, "ignore", false, "")
 	flag.IntVar(&opts.maxCNAMEs, "max-cnames", 0, "")
 	flag.BoolVar(&opts.nsid, "nsid", false, "")
@@ -208,6 +213,16 @@ func parseOptions() *Options {
 	}
 
 	opts.qname = flag.Arg(0)
+
+	if opts.https != "" && opts.httpsGET != "" {
+		mu.Fatalf("error: can't speicfy -https and -https-get together")
+	}
+	if opts.https != "" {
+		opts.httpEndpoint = opts.https
+	} else if opts.httpsGET != "" {
+		opts.httpEndpoint = opts.httpsGET
+		opts.httpUseGET = true
+	}
 
 	opts.qtypeStr = strings.ToUpper(opts.qtypeStr)
 	if strings.HasPrefix(opts.qtypeStr, "@") {

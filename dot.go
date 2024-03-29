@@ -96,32 +96,3 @@ func (c *DoTClient) Close() error {
 }
 
 /* (end dnsclient.Client interface) */
-
-/*
-func (c *DoTClient) tryConnect() error {
-	if c.conn != nil {
-		return nil
-	}
-	return c.dial()
-}
-
-
-	// TODO: add a retries count to the config
-	for i := 0; i < 2; i++ {
-		err = c.tryConnect()
-		if err != nil {
-			return nil, err
-		}
-		resp, _, err = c.client.ExchangeWithConn(req, c.conn)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, io.EOF) {
-			break
-		}
-		c.Close()
-	}
-
-	return resp, err
-}
-*/
