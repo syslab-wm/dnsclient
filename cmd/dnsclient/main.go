@@ -113,6 +113,8 @@ func main() {
 		HTTPEndpoint:     opts.httpEndpoint,
 		HTTPUseGET:       opts.httpUseGET,
 		IgnoreTruncation: opts.ignore,
+		IPv4Only:         opts.four,
+		IPv6Only:         opts.six,
 		MaxCNAMEs:        opts.maxCNAMEs,
 		NSID:             opts.nsid,
 		RD:               opts.rdflag,

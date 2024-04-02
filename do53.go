@@ -18,12 +18,9 @@ type Do53Client struct {
 
 func newDo53Client(config *Config) *Do53Client {
 	c := &Do53Client{config: config}
-	protocol := "" // udp
-	if config.TCP {
-		protocol = "tcp"
-	}
+
 	c.client = &dns.Client{
-		Net:     protocol,
+		Net:     config.netString(),
 		Timeout: config.Timeout,
 	}
 	return c

@@ -21,7 +21,7 @@ type DoTClient struct {
 func newDoTClient(config *Config) *DoTClient {
 	c := &DoTClient{config: config}
 	c.client = &dns.Client{
-		Net:     "tcp-tls",
+		Net:     config.netString(),
 		Timeout: config.Timeout,
 	}
 	return c

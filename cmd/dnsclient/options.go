@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,16 @@ options:
     Display this usage statement and exit.
     
 query options:
+  -4
+    Use IPv4 only
+
+    Default: false
+
+  -6
+    Use IPv6 Only
+
+    Default: false
+
   -adflag[=0|1]
     Sets the AD (authentic data) bit in the query.  This requests the
     server to validate the DNSSEC records.  If the server validated the
@@ -107,10 +118,11 @@ query options:
     provided, then port 53 is used for Do53,  port 853 for DoT, and port 443
     for DoH.
 
-    The default is to use CloudFlare's open resolver at 1.1.1.1
-    (for DoH, the URL is https://cloudflare-dns.com/dns-query).
+    The default is the first nameserver in /etc/resolv.conf.
 
-    Default: 1.1.1.1 (Cloudflare's open resolver)
+  -subnet ADDR
+    Send an EDNS Client Subnet options with the specified IP address or network
+    prefix.
 
   -tcp
     For Do53, use TCP.  The default is to use UDP.
@@ -145,6 +157,9 @@ query options:
         Enumerate the related services for QNAME.  This meta query
         uses the DNS Service Discovery (DNS-SD) set of DNS queries.
 
+     Finally, a non-standard type can be specified by it's numeric value 
+     as TYPE###, e.g.  -type TYPE234.
+
 
 examples:
   $ ./dnsclient -https -type NS www.cs.wm.edu
@@ -154,6 +169,8 @@ type Options struct {
 	// positional
 	qname string
 	// general query options
+	four         bool
+	six          bool
 	adflag       bool
 	bufsize      int
 	cdflag       bool
@@ -167,6 +184,7 @@ type Options struct {
 	nsid         bool
 	rdflag       bool
 	server       string
+	subnet       string
 	tcp          bool
 	timeout      time.Duration
 	tls          bool
@@ -190,6 +208,8 @@ func parseOptions() *Options {
 
 	flag.Usage = printUsage
 	// general options
+	flag.BoolVar(&opts.four, "4", false, "")
+	flag.BoolVar(&opts.six, "6", false, "")
 	flag.BoolVar(&opts.adflag, "adflag", true, "")
 	flag.IntVar(&opts.bufsize, "bufsize", 0, "")
 	flag.BoolVar(&opts.cdflag, "cdflag", false, "")
@@ -200,7 +220,8 @@ func parseOptions() *Options {
 	flag.IntVar(&opts.maxCNAMEs, "max-cnames", 0, "")
 	flag.BoolVar(&opts.nsid, "nsid", false, "")
 	flag.BoolVar(&opts.rdflag, "rdflag", true, "")
-	flag.StringVar(&opts.server, "server", "1.1.1.1", "")
+	flag.StringVar(&opts.server, "server", "", "")
+	flag.StringVar(&opts.subnet, "subnet", "", "")
 	flag.BoolVar(&opts.tcp, "tcp", false, "")
 	flag.DurationVar(&opts.timeout, "timeout", dnsclient.DefaultTimeout, "")
 	flag.BoolVar(&opts.tls, "tls", false, "")
@@ -214,6 +235,10 @@ func parseOptions() *Options {
 
 	opts.qname = flag.Arg(0)
 
+	if opts.four && opts.six {
+		mu.Fatalf("error: can't specify both -4 and -6")
+	}
+
 	if opts.https != "" && opts.httpsGET != "" {
 		mu.Fatalf("error: can't speicfy -https and -https-get together")
 	}
@@ -226,14 +251,30 @@ func parseOptions() *Options {
 
 	opts.qtypeStr = strings.ToUpper(opts.qtypeStr)
 	if strings.HasPrefix(opts.qtypeStr, "@") {
+		// a "meta-query"
 		if !metaQueries[opts.qtypeStr] {
 			mu.Fatalf("error: invalid (meta query) type %q", opts.qtypeStr)
 		}
+	} else if strings.HasPrefix(opts.qtypeStr, "TYPE") {
+		// a query for a non-standard qtype
+		i, err := strconv.ParseUint(opts.qtypeStr[4:], 10, 16)
+		if err != nil {
+			mu.Fatalf("error: invalid type %q", opts.qtypeStr)
+		}
+		opts.qtype = uint16(i)
 	} else {
 		opts.qtype, ok = dns.StringToType[opts.qtypeStr]
 		if !ok {
 			mu.Fatalf("error: invalid type %q", opts.qtypeStr)
 		}
+	}
+
+	if opts.server == "" {
+		conf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+		if err != nil {
+			mu.Fatalf("error: unable to retrieve default nameserver: %v", err)
+		}
+		opts.server = conf.Servers[0]
 	}
 
 	return &opts

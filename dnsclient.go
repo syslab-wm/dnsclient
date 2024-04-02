@@ -3,6 +3,7 @@ package dnsclient
 import (
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/dnsclient/internal/msgutil"
+	"github.com/syslab-wm/mu"
 )
 
 type Client interface {
@@ -27,7 +28,6 @@ func New(config *Config) (Client, error) {
 
 func NewMsg(config *Config, name string, qtype uint16) *dns.Msg {
 	var bufsize int
-	var usesEDNS0 bool
 
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(name), qtype)
@@ -41,20 +41,19 @@ func NewMsg(config *Config, name string, qtype uint16) *dns.Msg {
 		bufsize = DefaultUDPBufSize
 	} else {
 		bufsize = config.UDPBufSize
-		usesEDNS0 = true
 	}
 
-	if config.DO {
-		usesEDNS0 = true
-	} else if config.NSID {
-		usesEDNS0 = true
-	}
-
-	if usesEDNS0 {
+	if config.usesEDNS0() {
 		m.SetEdns0(uint16(bufsize), config.DO)
-	}
-	if config.NSID {
-		msgutil.AddNSID(m)
+		if config.NSID {
+			msgutil.AddNSIDOption(m)
+		}
+		if config.ClientSubnet != "" {
+			err := msgutil.AddClientSubnetOption(m, config.ClientSubnet)
+			if err != nil {
+				mu.Panicf("failed to create DNS message: %v", err)
+			}
+		}
 	}
 
 	return m

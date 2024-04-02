@@ -14,6 +14,7 @@ const (
 
 	DefaultDo53Port     = "53"
 	DefaultDoTPort      = "853"
+	DefaultDoQPort      = "853"
 	DefaultHTTPEndpoint = "/dns-query"
 	DefaultTimeout      = 5 * time.Second
 	DefaultUDPBufSize   = 4096 // in the EDNS0 opt record
@@ -24,10 +25,13 @@ const (
 type Config struct {
 	AD               bool
 	CD               bool
+	ClientSubnet     string
 	DO               bool // DNSSEC
 	HTTPEndpoint     string
 	HTTPUseGET       bool
 	IgnoreTruncation bool
+	IPv4Only         bool
+	IPv6Only         bool
 	KeepAlive        bool
 	KeepOpen         bool
 	MaxCNAMEs        int
@@ -40,22 +44,63 @@ type Config struct {
 	TLS              bool
 }
 
-func (config *Config) Validate() error {
-	if config.UDPBufSize < MinUDPBufSize || config.UDPBufSize > MaxUDPBufSize {
+func (cfg *Config) Validate() error {
+	if cfg.UDPBufSize < MinUDPBufSize || cfg.UDPBufSize > MaxUDPBufSize {
 		return fmt.Errorf("invalid UDPBufSize; must be %d <= B <= %d", MinUDPBufSize, MaxUDPBufSize)
 	}
 
-	if config.MaxCNAMEs < MinMaxCNAMEs || config.MaxCNAMEs > MaxMaxCNAMEs {
+	if cfg.MaxCNAMEs < MinMaxCNAMEs || cfg.MaxCNAMEs > MaxMaxCNAMEs {
 		return fmt.Errorf("invalid MaxCNAMES; must be %d <= B <= %d", MinMaxCNAMEs, MaxMaxCNAMEs)
 	}
 
-	if (config.HTTPEndpoint == "") && config.HTTPUseGET {
+	if (cfg.HTTPEndpoint == "") && cfg.HTTPUseGET {
 		return fmt.Errorf("HTTPEndpoint must be a non-empty string")
 	}
 
-	if (config.HTTPEndpoint != "") && config.TLS {
+	if (cfg.HTTPEndpoint != "") && cfg.TLS {
 		return fmt.Errorf("Cannot specify both DoH and DoT")
 	}
 
 	return nil
+}
+
+func (cfg *Config) netString() string {
+	net := "udp"
+	if cfg.IPv4Only {
+		net = "udp4"
+	}
+	if cfg.IPv6Only {
+		net = "udp6"
+	}
+
+	if cfg.TCP {
+		net = "tcp"
+		if cfg.IPv4Only {
+			net = "tcp4"
+		}
+		if cfg.IPv6Only {
+			net = "tcp6"
+		}
+	}
+
+	if cfg.TLS {
+		net = "tcp-tls"
+		if cfg.IPv4Only {
+			net = "tcp4-tls"
+		}
+		if cfg.IPv6Only {
+			net = "tcp6-tls"
+		}
+	}
+
+	return net
+}
+
+func (cfg *Config) usesEDNS0() bool {
+	// XXX: shoudl UDPBufSize be here?
+	if cfg.DO || cfg.NSID || cfg.ClientSubnet != "" || cfg.UDPBufSize > 0 {
+		return true
+	}
+
+	return false
 }
