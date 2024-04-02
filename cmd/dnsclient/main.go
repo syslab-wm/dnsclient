@@ -109,6 +109,7 @@ func main() {
 	config := dnsclient.Config{
 		AD:               opts.adflag,
 		CD:               opts.cdflag,
+		ClientSubnet:     opts.subnetAddr,
 		DO:               opts.dnssec,
 		HTTPEndpoint:     opts.httpEndpoint,
 		HTTPUseGET:       opts.httpUseGET,

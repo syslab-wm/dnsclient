@@ -7,7 +7,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/adt/set"
-	"github.com/syslab-wm/dnsclient/internal/msgutil"
+	"github.com/syslab-wm/dnsclient/msgutil"
 	"github.com/syslab-wm/functools"
 	"github.com/syslab-wm/mu"
 )

@@ -41,7 +41,7 @@ func (c *Do53Client) isConnected() bool {
 	return c.conn != nil
 }
 
-func (c *Do53Client) queryUDP(req *dns.Msg) (*dns.Msg, error) {
+func (c *Do53Client) exchangeUDP(req *dns.Msg) (*dns.Msg, error) {
 	var err error
 	var resp *dns.Msg
 	// even though this is UDP, from an API perspective, we still have to call
@@ -53,12 +53,23 @@ func (c *Do53Client) queryUDP(req *dns.Msg) (*dns.Msg, error) {
 		}
 	}
 
-	log.Printf("query UDP")
 	resp, _, err = c.client.ExchangeWithConn(req, c.conn)
-	return resp, err
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Truncated && !c.config.IgnoreTruncation {
+		// TODO: we could first try a large UDP size before falling back to TCP
+		config2 := c.config.dup()
+		config2.TCP = true
+		tcpClient := newDo53Client(config2)
+		return tcpClient.Exchange(req)
+	}
+
+	return resp, nil
 }
 
-func (c *Do53Client) queryTCP(req *dns.Msg) (*dns.Msg, error) {
+func (c *Do53Client) exchangeTCP(req *dns.Msg) (*dns.Msg, error) {
 	var err error
 	var reused bool
 	var retried bool
@@ -74,7 +85,6 @@ reconnect:
 		reused = true
 	}
 
-	log.Printf("query TCP")
 	resp, _, err = c.client.ExchangeWithConn(req, c.conn)
 	if err == nil {
 		return resp, nil
@@ -112,11 +122,11 @@ func (c *Do53Client) Close() error {
 	return err
 }
 
-func (c *Do53Client) Query(req *dns.Msg) (*dns.Msg, error) {
+func (c *Do53Client) Exchange(req *dns.Msg) (*dns.Msg, error) {
 	if c.config.TCP {
-		return c.queryTCP(req)
+		return c.exchangeTCP(req)
 	} else {
-		return c.queryUDP(req)
+		return c.exchangeUDP(req)
 	}
 }
 

@@ -58,7 +58,7 @@ func (c *DoHClient) Config() *Config {
 	return c.config
 }
 
-func (c *DoHClient) Query(req *dns.Msg) (*dns.Msg, error) {
+func (c *DoHClient) Exchange(req *dns.Msg) (*dns.Msg, error) {
 	var httpReq *http.Request
 	var err error
 

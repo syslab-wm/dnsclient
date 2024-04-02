@@ -2,6 +2,7 @@ package dnsclient
 
 import (
 	"fmt"
+	"net/netip"
 	"time"
 )
 
@@ -25,7 +26,7 @@ const (
 type Config struct {
 	AD               bool
 	CD               bool
-	ClientSubnet     string
+	ClientSubnet     netip.Addr
 	DO               bool // DNSSEC
 	HTTPEndpoint     string
 	HTTPUseGET       bool
@@ -98,9 +99,16 @@ func (cfg *Config) netString() string {
 
 func (cfg *Config) usesEDNS0() bool {
 	// XXX: shoudl UDPBufSize be here?
-	if cfg.DO || cfg.NSID || cfg.ClientSubnet != "" || cfg.UDPBufSize > 0 {
+	if cfg.DO || cfg.NSID || cfg.ClientSubnet.IsValid() || cfg.UDPBufSize > 0 {
 		return true
 	}
 
 	return false
+}
+
+func (cfg *Config) dup() *Config {
+	c := *cfg
+	// make a deep copy of the address
+	c.ClientSubnet = netip.MustParseAddr(cfg.ClientSubnet.String())
+	return &c
 }

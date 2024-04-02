@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/miekg/dns"
-	"github.com/syslab-wm/dnsclient/internal/msgutil"
+	"github.com/syslab-wm/dnsclient/msgutil"
 )
 
 func ProbeSupportsEDNS0Subnet(c Client, domainname string) (bool, error) {
@@ -25,7 +25,7 @@ func ProbeSupportsEDNS0Subnet(c Client, domainname string) (bool, error) {
 	o.Option = append(o.Option, e)
 	msg.Extra = append(msg.Extra, o)
 
-	resp, err := Query(c, msg)
+	resp, err := Exchange(c, msg)
 	if err != nil {
 		return false, err
 	}
@@ -62,7 +62,7 @@ func ProbeNSID(c Client, domainname string) (string, error) {
 	o.Option = append(o.Option, e)
 	msg.Extra = append(msg.Extra, o)
 
-	resp, err := Query(c, msg)
+	resp, err := Exchange(c, msg)
 	if err != nil {
 		return "", err
 	}

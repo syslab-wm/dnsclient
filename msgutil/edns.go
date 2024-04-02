@@ -1,7 +1,6 @@
 package msgutil
 
 import (
-	"fmt"
 	"net"
 	"net/netip"
 
@@ -10,31 +9,25 @@ import (
 	"github.com/syslab-wm/mu"
 )
 
-func AddNSIDOption(m *dns.Msg) error {
+func AddNSIDOption(m *dns.Msg) {
 	opt := m.IsEdns0()
 	if opt == nil {
-		return fmt.Errorf("Cannot add NSID option: message does not have an OPT RR")
+		m.SetEdns0(4096, false)
 	}
 	e := &dns.EDNS0_NSID{
 		Code: dns.EDNS0NSID,
 	}
 	opt.Option = append(opt.Option, e)
-	return nil
 }
 
-func AddClientSubnetOption(m *dns.Msg, subnetAddr string) error {
+func AddClientSubnetOption(m *dns.Msg, addr netip.Addr) {
 	opt := m.IsEdns0()
 	if opt == nil {
-		return fmt.Errorf("Cannot add Client Subnet option: message does not have an OPT RR")
+		m.SetEdns0(4096, false)
 	}
 
 	e := &dns.EDNS0_SUBNET{
 		Code: dns.EDNS0SUBNET,
-	}
-
-	addr, err := netip.ParseAddr(subnetAddr)
-	if err != nil {
-		return fmt.Errorf("Cannot add Client Subnet option: invalid subnet %q", subnetAddr)
 	}
 
 	if addr.Is4() {
@@ -44,10 +37,9 @@ func AddClientSubnetOption(m *dns.Msg, subnetAddr string) error {
 		e.Family = 2
 		e.SourceNetmask = net.IPv6len * 8
 	} else {
-		mu.Panicf("netip.Addr %v (%q) is neither a valid IPv4 nor IPv6 address", addr, subnetAddr)
+		mu.Panicf("netip.Addr %v is neither a valid IPv4 nor IPv6 address", addr)
 	}
 
 	e.Address = netx.AddrAsIP(addr) // convert netip.Addr to net.IP
 	opt.Option = append(opt.Option, e)
-	return nil
 }

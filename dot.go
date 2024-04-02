@@ -48,7 +48,7 @@ func (c *DoTClient) Config() *Config {
 	return c.config
 }
 
-func (c *DoTClient) Query(req *dns.Msg) (*dns.Msg, error) {
+func (c *DoTClient) Exchange(req *dns.Msg) (*dns.Msg, error) {
 	var err error
 	var reused bool
 	var retried bool

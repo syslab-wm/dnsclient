@@ -2,13 +2,12 @@ package dnsclient
 
 import (
 	"github.com/miekg/dns"
-	"github.com/syslab-wm/dnsclient/internal/msgutil"
-	"github.com/syslab-wm/mu"
+	"github.com/syslab-wm/dnsclient/msgutil"
 )
 
 type Client interface {
 	Config() *Config
-	Query(req *dns.Msg) (*dns.Msg, error)
+	Exchange(req *dns.Msg) (*dns.Msg, error)
 	Close() error
 }
 
@@ -48,19 +47,16 @@ func NewMsg(config *Config, name string, qtype uint16) *dns.Msg {
 		if config.NSID {
 			msgutil.AddNSIDOption(m)
 		}
-		if config.ClientSubnet != "" {
-			err := msgutil.AddClientSubnetOption(m, config.ClientSubnet)
-			if err != nil {
-				mu.Panicf("failed to create DNS message: %v", err)
-			}
+		if config.ClientSubnet.IsValid() {
+			msgutil.AddClientSubnetOption(m, config.ClientSubnet)
 		}
 	}
 
 	return m
 }
 
-func query(c Client, req *dns.Msg) (*dns.Msg, error) {
-	resp, err := c.Query(req)
+func exchange(c Client, req *dns.Msg) (*dns.Msg, error) {
+	resp, err := c.Exchange(req)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +86,7 @@ func query(c Client, req *dns.Msg) (*dns.Msg, error) {
 // to inspect the msg to see if the query succeeded; if the caller wants the
 // nitty-gritty details of why the query didn't get an answer, it can inspect
 // the error value.
-func Query(c Client, req *dns.Msg) (*dns.Msg, error) {
+func Exchange(c Client, req *dns.Msg) (*dns.Msg, error) {
 	var err error
 	var cnames []*dns.CNAME
 	var resp *dns.Msg
@@ -104,7 +100,7 @@ func Query(c Client, req *dns.Msg) (*dns.Msg, error) {
 	}
 
 	for i := 0; i <= config.MaxCNAMEs; i++ {
-		resp, err = query(c, req)
+		resp, err = exchange(c, req)
 		if err != nil {
 			return nil, err
 		}
@@ -167,5 +163,5 @@ func Query(c Client, req *dns.Msg) (*dns.Msg, error) {
 
 func Lookup(c Client, name string, qtype uint16) (*dns.Msg, error) {
 	req := NewMsg(c.Config(), name, qtype)
-	return Query(c, req)
+	return Exchange(c, req)
 }

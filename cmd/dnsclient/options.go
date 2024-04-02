@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -44,7 +45,7 @@ query options:
 
     Default: 1
 
-  -bufsize=B
+  -bufsize B
     Set the UDP message buffer size advertised using EDNS0 t B bytes.  The maximum
     and minimum sizes of this buffer are 65535 and 0, respectively.  Values other
     than 0 will cause an EDNS query to be sent.
@@ -157,7 +158,7 @@ query options:
         Enumerate the related services for QNAME.  This meta query
         uses the DNS Service Discovery (DNS-SD) set of DNS queries.
 
-     Finally, a non-standard type can be specified by it's numeric value 
+     Finally, a non-standard type can be specified by its numeric value 
      as TYPE###, e.g.  -type TYPE234.
 
 
@@ -185,6 +186,7 @@ type Options struct {
 	rdflag       bool
 	server       string
 	subnet       string
+	subnetAddr   netip.Addr // derived
 	tcp          bool
 	timeout      time.Duration
 	tls          bool
@@ -199,7 +201,7 @@ var metaQueries = map[string]bool{
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, "%s", usage)
+	fmt.Fprintf(os.Stdout, "%s", usage)
 }
 
 func parseOptions() *Options {
@@ -275,6 +277,14 @@ func parseOptions() *Options {
 			mu.Fatalf("error: unable to retrieve default nameserver: %v", err)
 		}
 		opts.server = conf.Servers[0]
+	}
+
+	if opts.subnet != "" {
+		addr, err := netip.ParseAddr(opts.subnet)
+		if err != nil {
+			mu.Fatalf("error: invalid subnet: %v", err)
+		}
+		opts.subnetAddr = addr
 	}
 
 	return &opts
