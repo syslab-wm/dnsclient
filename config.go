@@ -43,6 +43,8 @@ type Config struct {
 	Timeout          time.Duration
 	UDPBufSize       int
 	TLS              bool
+	TLSCA            string
+	TLSHostname      string
 }
 
 func (cfg *Config) Validate() error {

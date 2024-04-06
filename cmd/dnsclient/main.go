@@ -124,6 +124,8 @@ func main() {
 		Timeout:          opts.timeout,
 		UDPBufSize:       opts.bufsize,
 		TLS:              opts.tls,
+		TLSCA:            opts.tlsCA,
+		TLSHostname:      opts.tlsHostname,
 	}
 
 	c, err := dnsclient.New(&config)

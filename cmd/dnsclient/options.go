@@ -137,6 +137,15 @@ query options:
     Use DNS over TLS (DoT).  When this option is in use, the port
     number defaults to 853.
 
+  -tls-ca CA_FILE
+    By default, certificat authority certificat are loaded from the system's default certificate store.
+    This option allows an alternative CA certificate to be used for TLS validation.  CA_FILE must
+    be in the PM format.
+
+  -tls-hostname HOSTNAME
+    Use th provided HOSTNAME during remote server TLS certificate validation.  Otherwise, theh DNS
+    server name is used.
+
   -type QTYPE
     The query type (e.g., A, AAAA, NS)
 
@@ -190,6 +199,8 @@ type Options struct {
 	tcp          bool
 	timeout      time.Duration
 	tls          bool
+	tlsCA        string
+	tlsHostname  string
 	qtypeStr     string
 	qtype        uint16 // derived
 }
@@ -227,6 +238,8 @@ func parseOptions() *Options {
 	flag.BoolVar(&opts.tcp, "tcp", false, "")
 	flag.DurationVar(&opts.timeout, "timeout", dnsclient.DefaultTimeout, "")
 	flag.BoolVar(&opts.tls, "tls", false, "")
+	flag.StringVar(&opts.tlsCA, "tls-ca", "", "")
+	flag.StringVar(&opts.tlsHostname, "tls-hostname", "", "")
 	flag.StringVar(&opts.qtypeStr, "type", "A", "")
 
 	flag.Parse()

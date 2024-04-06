@@ -5,11 +5,11 @@ import (
 	"net/netip"
 
 	"github.com/miekg/dns"
-	"github.com/syslab-wm/dnsclient/internal/netx"
 	"github.com/syslab-wm/mu"
+	"github.com/syslab-wm/netx"
 )
 
-func AddNSIDOption(m *dns.Msg) {
+func AddEDNS0NSID(m *dns.Msg) {
 	opt := m.IsEdns0()
 	if opt == nil {
 		m.SetEdns0(4096, false)
@@ -20,7 +20,7 @@ func AddNSIDOption(m *dns.Msg) {
 	opt.Option = append(opt.Option, e)
 }
 
-func AddClientSubnetOption(m *dns.Msg, addr netip.Addr) {
+func AddEDNS0Subnet(m *dns.Msg, addr netip.Addr) {
 	opt := m.IsEdns0()
 	if opt == nil {
 		m.SetEdns0(4096, false)
@@ -43,3 +43,17 @@ func AddClientSubnetOption(m *dns.Msg, addr netip.Addr) {
 	e.Address = netx.AddrAsIP(addr) // convert netip.Addr to net.IP
 	opt.Option = append(opt.Option, e)
 }
+
+/*
+func AddEDNS0Cookie(m *dns.Msg) {
+	opt := m.IsEdns0()
+	if opt == nil {
+		m.SetEdns0(4096, false)
+	}
+	e := &dns.EDNS0_COOKIE{
+		Code: dns.EDNS0COOKIE,
+        Cookie: // TODO: 8 bytes, hex-encoded (so a 16-byte string)
+	}
+	opt.Option = append(opt.Option, e)
+}
+*/

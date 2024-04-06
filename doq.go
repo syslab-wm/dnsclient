@@ -8,7 +8,7 @@ import (
 	"log"
 
 	"github.com/miekg/dns"
-	"github.com/syslab-wm/dnsclient/internal/netx"
+	"github.com/syslab-wm/netx"
 )
 
 type DoQClient struct {
@@ -29,7 +29,7 @@ func newDoQClient(config *Config) *DoQClient {
 
 func (c *DoQClient) dial() error {
 	var err error
-	addr := netx.TryAddPort(c.config.Server, DefaultDoQPort)
+	addr := netx.TryJoinHostPort(c.config.Server, DefaultDoQPort)
 	log.Printf("connecting to DNS server %s", addr)
 	c.conn, err = c.client.Dial(addr)
 	if err != nil {

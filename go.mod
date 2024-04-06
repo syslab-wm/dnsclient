@@ -7,6 +7,7 @@ require (
 	github.com/syslab-wm/adt v0.0.0-20240318160205-63295273c7e3
 	github.com/syslab-wm/functools v0.0.0-20240317173703-a058dbb9d1c7
 	github.com/syslab-wm/mu v0.2.0
+	github.com/syslab-wm/netx v0.0.0-20240405011858-aec6d38cc7c0
 )
 
 require (

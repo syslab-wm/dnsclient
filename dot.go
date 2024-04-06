@@ -8,7 +8,7 @@ import (
 	"log"
 
 	"github.com/miekg/dns"
-	"github.com/syslab-wm/dnsclient/internal/netx"
+	"github.com/syslab-wm/netx"
 )
 
 type DoTClient struct {
@@ -29,7 +29,7 @@ func newDoTClient(config *Config) *DoTClient {
 
 func (c *DoTClient) dial() error {
 	var err error
-	addr := netx.TryAddPort(c.config.Server, DefaultDoTPort)
+	addr := netx.TryJoinHostPort(c.config.Server, DefaultDoTPort)
 	log.Printf("connecting to DNS server %s", addr)
 	c.conn, err = c.client.Dial(addr)
 	if err != nil {
@@ -65,6 +65,10 @@ reconnect:
 	}
 
 	resp, _, err = c.client.ExchangeWithConn(req, c.conn)
+	if !c.config.KeepOpen {
+		c.Close()
+	}
+
 	if err == nil {
 		return resp, nil
 	}
@@ -73,11 +77,11 @@ reconnect:
 		return nil, err
 	}
 
+	// The server closed the connection on us rather than returning a response
 	c.Close()
 
-	// We were reusing an already established connection and the server
-	// closed the connection on us when trying to make this last query.
-	// In this case, try once to reconnect and resend the query.
+	// If we were reusing an already established connection, try once to
+	// reconnect and resend the query.
 	if reused && !retried {
 		retried = true
 		goto reconnect
@@ -88,7 +92,7 @@ reconnect:
 
 func (c *DoTClient) Close() error {
 	if c.conn == nil {
-		return nil // XXX: should we instead return an error?
+		return nil
 	}
 	err := c.conn.Close()
 	c.conn = nil

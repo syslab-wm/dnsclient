@@ -3,6 +3,7 @@ package dnsclient
 import (
 	"github.com/miekg/dns"
 	"github.com/syslab-wm/dnsclient/msgutil"
+	"github.com/syslab-wm/mu"
 )
 
 type Client interface {
@@ -45,25 +46,14 @@ func NewMsg(config *Config, name string, qtype uint16) *dns.Msg {
 	if config.usesEDNS0() {
 		m.SetEdns0(uint16(bufsize), config.DO)
 		if config.NSID {
-			msgutil.AddNSIDOption(m)
+			msgutil.AddEDNS0NSID(m)
 		}
 		if config.ClientSubnet.IsValid() {
-			msgutil.AddClientSubnetOption(m, config.ClientSubnet)
+			msgutil.AddEDNS0Subnet(m, config.ClientSubnet)
 		}
 	}
 
 	return m
-}
-
-func exchange(c Client, req *dns.Msg) (*dns.Msg, error) {
-	resp, err := c.Exchange(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.Rcode != dns.RcodeSuccess {
-		return nil, NewDNSError(DNSErrRcodeNotSuccess, resp)
-	}
-	return resp, nil
 }
 
 // Return an error if:
@@ -100,9 +90,12 @@ func Exchange(c Client, req *dns.Msg) (*dns.Msg, error) {
 	}
 
 	for i := 0; i <= config.MaxCNAMEs; i++ {
-		resp, err = exchange(c, req)
+		resp, err = c.Exchange(req)
 		if err != nil {
 			return nil, err
+		}
+		if resp.Rcode != dns.RcodeSuccess {
+			return resp, ErrRcode
 		}
 
 		// gather all RRs that are of the qtype
@@ -118,25 +111,25 @@ func Exchange(c Client, req *dns.Msg) (*dns.Msg, error) {
 			}
 		}
 
-		// if we're following CNAMEs, get all of the CNAMES from the answer
+		// get all of the CNAMES from the answer
 		cnames = msgutil.CollectRRs[*dns.CNAME](resp.Answer)
 		if len(cnames) == 0 {
-			return nil, NewDNSError(DNSErrMissingAnswer, resp)
+			return resp, ErrMissingAnswer
 		}
 
 		// validate that the CNAMEs form a chain
 		ordered := msgutil.OrderCNAMEs(cnames)
 		if !ordered {
-			return nil, NewDNSError(DNSErrInvalidCNAMEChain, resp)
+			return resp, ErrInvalidCNAMEChain
 
 		}
 		// the head of the chain must match the name we're searching for
 		if cnames[0].Hdr.Name != req.Question[0].Name {
-			return nil, NewDNSError(DNSErrInvalidCNAMEChain, resp)
+			return resp, ErrInvalidCNAMEChain
 		}
 
-		// is the last CNAME in chain an alias for one of the RRs that are of
-		// the qtype we're searching for.  If so, success.
+		// is the last CNAME in the chain an alias for one of the RRs that are
+		// of the qtype we're searching for.  If so, success.
 		lastCNAME := cnames[len(cnames)-1]
 		for _, rr := range ans {
 			if lastCNAME.Target == rr.Header().Name {
@@ -145,20 +138,22 @@ func Exchange(c Client, req *dns.Msg) (*dns.Msg, error) {
 		}
 
 		if len(ans) > 0 {
-			// a really weird case: the resp has record types we're searching
+			// weird case: resp has record types we're searching
 			// for, but not for an alias of a name we're searching for
-			return nil, NewDNSError(DNSErrInvalidAnswer, resp)
+			return resp, ErrMismatchingAnswer
 		}
 
-		// update the domain name to query; TODO: get Qtype
+		// setup to repeat query on the last CNAME in the chain
 		req.SetQuestion(dns.Fqdn(cnames[len(cnames)-1].Target), qtype)
 	}
 
 	if len(cnames) > 0 {
-		return nil, NewDNSError(DNSErrMaxCNAMEs, resp)
+		return resp, ErrMaxCNAMEs
 	}
 
-	return nil, NewDNSError(DNSErrMissingAnswer, resp)
+	// UNREACHABLE
+	mu.BUG("reached what should be unreachable code: req: %v, resp: %v", req, resp)
+	return resp, ErrMissingAnswer
 }
 
 func Lookup(c Client, name string, qtype uint16) (*dns.Msg, error) {

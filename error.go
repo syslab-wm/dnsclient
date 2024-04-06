@@ -1,48 +1,19 @@
 package dnsclient
 
-import (
-	"fmt"
+type Error struct{ err string }
 
-	"github.com/miekg/dns"
-)
-
-type DNSErr int
-
-const (
-	DNSErrRcodeNotSuccess DNSErr = iota
-
-	DNSErrMissingAnswer
-	DNSErrInvalidAnswer
-	DNSErrInvalidCNAMEChain
-	DNSErrMaxCNAMEs
-
-	DNSErrBadFormatAnswer
-)
-
-var DNSErrToString = map[DNSErr]string{
-	DNSErrRcodeNotSuccess: "RCODE was not SUCCESS",
-
-	DNSErrMissingAnswer:     "DNS response does not answer the query",
-	DNSErrInvalidAnswer:     "DNS response has an answer that matches neither the qname nor one of its aliases",
-	DNSErrInvalidCNAMEChain: "DNS response contains an invalid CNAME chain",
-	DNSErrMaxCNAMEs:         "query followed max number of CNAMEs",
-
-	DNSErrBadFormatAnswer: "DNS response has an answer where the data does not conform to the RR type",
-}
-
-type DNSError struct {
-	Reason   DNSErr
-	Response *dns.Msg // optional
-}
-
-func NewDNSError(reason DNSErr, response *dns.Msg) *DNSError {
-	return &DNSError{Reason: reason, Response: response}
-}
-
-func (e *DNSError) Error() string {
-	if e.Reason == DNSErrRcodeNotSuccess {
-		return fmt.Sprintf("%s: %s (rcode=%d)", DNSErrToString[e.Reason],
-			dns.RcodeToString[e.Response.Rcode], e.Response.Rcode)
+func (e *Error) Error() string {
+	if e == nil {
+		return "dnsclient: <nil>"
 	}
-	return fmt.Sprintf("%s", DNSErrToString[e.Reason])
+	return "dnsclient: " + e.err
 }
+
+var (
+	ErrRcode             error = &Error{err: "response rcode is not success"} // DNS response's rcode is something other than Sucess
+	ErrMissingAnswer     error = &Error{err: "response is missing an answer"} // the DNS response has a Success rcode but does not include an answer to the query
+	ErrMismatchingAnswer error = &Error{err: "response has an answer that matches neither the qname nor one of its aliases"}
+	ErrInvalidCNAMEChain error = &Error{err: "response contains an invalid CNAME chain"}
+	ErrMaxCNAMEs         error = &Error{err: "query followed max number of CNAMEs"}
+	ErrBadAnswer         error = &Error{err: "response has an answer the data does not conform to the RR type"}
+)

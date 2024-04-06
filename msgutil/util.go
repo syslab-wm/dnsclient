@@ -27,52 +27,6 @@ func CollectRRsByU16Type(rrs []dns.RR, rrtype uint16) []dns.RR {
 }
 */
 
-/*
-// Covers both A and AAAA records
-type AddressRecord struct {
-	Name string
-	Addr netip.Addr
-}
-
-func CollectARecords(rrs []dns.RR) []*AddressRecord {
-	var addrRecs []*AddressRecord
-
-	as := CollectRRs[*dns.A](rrs)
-	if len(as) == 0 {
-		return addrRecs
-	}
-
-	for _, a := range as {
-		addr, ok := netip.AddrFromSlice(a.A)
-		if !ok {
-			continue
-		}
-		addrRecs = append(addrRecs, &AddressRecord{Name: a.Hdr.Name, Addr: addr})
-	}
-
-	return addrRecs
-}
-
-func CollectAAAARecords(rrs []dns.RR) []*AddressRecord {
-	var addrRecs []*AddressRecord
-
-	as := CollectRRs[*dns.AAAA](rrs)
-	if len(as) == 0 {
-		return addrRecs
-	}
-
-	for _, a := range as {
-		addr, ok := netip.AddrFromSlice(a.AAAA)
-		if !ok {
-			continue
-		}
-		addrRecs = append(addrRecs, &AddressRecord{Name: a.Hdr.Name, Addr: addr})
-	}
-
-	return addrRecs
-}
-*/
-
 // OrderCNAMEs takes a slice of *[github.com/miekg/dns.CNAME] and attempts to
 // the sort the slice such that entry i's Target is entry i's Name.  We call
 // this a "CNAME chain".  If the sort is successful, OrderCNAMEs returns true;

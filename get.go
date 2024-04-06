@@ -36,7 +36,7 @@ func getA(c Client, domain string) ([]netip.Addr, error) {
 	}
 
 	if len(addrs) == 0 {
-		return nil, NewDNSError(DNSErrBadFormatAnswer, nil)
+		return nil, ErrBadAnswer
 	}
 
 	return addrs, nil
@@ -67,7 +67,7 @@ func getAAAA(c Client, domain string) ([]netip.Addr, error) {
 	}
 
 	if len(addrs) == 0 {
-		return nil, NewDNSError(DNSErrBadFormatAnswer, nil)
+		return nil, ErrBadAnswer
 	}
 
 	return addrs, nil
@@ -120,18 +120,18 @@ func (ns *NameServer) String() string {
 	return fmt.Sprintf("name: %s, addrs: %v", ns.Name, ns.Addrs)
 }
 
-func lookupNS(c Client, domain string) ([]*dns.NS, error) {
+func lookupNS(c Client, domain string) ([]*dns.NS, *dns.Msg, error) {
 	resp, err := Lookup(c, domain, dns.TypeNS)
 	if err != nil {
-		return nil, err
+		return nil, resp, err
 	}
-	return msgutil.CollectRRs[*dns.NS](resp.Answer), nil
+	return msgutil.CollectRRs[*dns.NS](resp.Answer), resp, nil
 }
 
 func getNS(c Client, domain string) ([]string, error) {
 	var nameServers []string
 
-	nses, err := lookupNS(c, domain)
+	nses, resp, err := lookupNS(c, domain)
 	if err == nil {
 		nameServers = functools.Map[*dns.NS, string](nses, func(ns *dns.NS) string {
 			return ns.Ns
@@ -142,18 +142,12 @@ func getNS(c Client, domain string) ([]string, error) {
 	// check if the query returned RCode success, but failed because there
 	// simply wasn't an answer.  In such a case, see if the Authority section
 	// has an SOA entry, and return the nameserver in that entry
-	e, ok := err.(*DNSError)
-	if !ok {
+	if err == ErrRcode {
 		return nil, err
 	}
 
-	if e.Reason == DNSErrRcodeNotSuccess {
-		return nil, err
-	}
-
-	resp := e.Response
 	if resp == nil {
-		mu.BUG("expected DNSError to have a non-nil Response field")
+		mu.BUG("expected non-nil Response ")
 	}
 
 	soas := msgutil.CollectRRs[*dns.SOA](resp.Ns)
